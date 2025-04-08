@@ -33,6 +33,7 @@ dependencies {
 
     // MySQL JDBC (Spring Boot가 버전 자동 관리)
     implementation("mysql:mysql-connector-java:8.0.33")
+    implementation("org.springframework.boot:spring-boot-starter-jdbc")
 
     // HikariCP
     implementation("com.zaxxer:HikariCP")
