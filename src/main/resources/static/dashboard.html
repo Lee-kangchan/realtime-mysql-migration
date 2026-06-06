@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CDC Replication Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-0: #0d1224;
+      --bg-1: #111a33;
+      --bg-2: #1a2444;
+      --accent: #7cf9c8;
+      --accent-2: #6aa6ff;
+      --warning: #ffb86b;
+      --danger: #ff6b7a;
+      --text: #e9eefb;
+      --muted: #9aa8c6;
+      --card: rgba(255, 255, 255, 0.05);
+      --border: rgba(255, 255, 255, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 10% 10%, #1d2a57 0%, var(--bg-0) 40%, #090b16 100%);
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 28px 32px 10px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 28px;
+      letter-spacing: 0.4px;
+    }
+
+    header .meta {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      padding: 16px 32px 32px 32px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      backdrop-filter: blur(10px);
+    }
+
+    .card h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+    }
+
+    .value {
+      font-size: 30px;
+      font-weight: 700;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(124, 249, 200, 0.15);
+      color: var(--accent);
+    }
+
+    .pill.stream { background: rgba(106, 166, 255, 0.15); color: var(--accent-2); }
+
+    .bar {
+      height: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.6s ease;
+    }
+
+    .ops {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .ops div {
+      padding: 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .status {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .spark {
+      height: 48px;
+      width: 100%;
+    }
+
+    .footer {
+      padding: 0 32px 30px 32px;
+      color: var(--muted);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+    }
+
+    @media (max-width: 720px) {
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CDC Replication Dashboard</h1>
+    <div class="meta">/api/metrics</div>
+  </header>
+
+  <section class="grid">
+    <div class="card">
+      <h3>Mode</h3>
+      <div class="row">
+        <div class="value" id="mode">-</div>
+        <div class="pill" id="mode-pill">-</div>
+      </div>
+      <div class="bar"><span id="mode-bar"></span></div>
+    </div>
+
+    <div class="card">
+      <h3>Total Events</h3>
+      <div class="value" id="total">-</div>
+      <svg class="spark" id="spark" viewBox="0 0 120 48" preserveAspectRatio="none"></svg>
+    </div>
+
+    <div class="card">
+      <h3>Snapshot vs Stream</h3>
+      <div class="row">
+        <div>Snapshot</div>
+        <div id="snapshot">-</div>
+      </div>
+      <div class="bar"><span id="snapshot-bar"></span></div>
+      <div class="row">
+        <div>Stream</div>
+        <div id="stream">-</div>
+      </div>
+      <div class="bar"><span id="stream-bar"></span></div>
+    </div>
+
+    <div class="card">
+      <h3>Event Lag</h3>
+      <div class="value" id="lag">-</div>
+      <div class="status" id="lag-status">-</div>
+    </div>
+
+    <div class="card">
+      <h3>Operations</h3>
+      <div class="ops">
+        <div>create: <span id="op-c">-</span></div>
+        <div>update: <span id="op-u">-</span></div>
+        <div>delete: <span id="op-d">-</span></div>
+        <div>snapshot: <span id="op-r">-</span></div>
+        <div>unknown: <span id="op-x">-</span></div>
+        <div>errors: <span id="op-e">-</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Last Event</h3>
+      <div class="status" id="last-event">-</div>
+    </div>
+  </section>
+
+  <div class="footer">Auto-refresh: 2s</div>
+
+  <script>
+    const sparkData = [];
+
+    function formatNumber(num) {
+      if (num === null || num === undefined) return "-";
+      return num.toLocaleString();
+    }
+
+    function formatLag(ms) {
+      if (ms === null || ms === undefined) return "-";
+      if (ms < 1000) return `${ms} ms`;
+      const sec = (ms / 1000).toFixed(1);
+      return `${sec} s`;
+    }
+
+    function updateSpark(value) {
+      if (value === null || value === undefined) return;
+      sparkData.push(value);
+      if (sparkData.length > 30) sparkData.shift();
+
+      const max = Math.max(...sparkData, 1);
+      const points = sparkData.map((v, i) => {
+        const x = (i / (sparkData.length - 1)) * 120;
+        const y = 48 - (v / max) * 46;
+        return `${x},${y}`;
+      }).join(" ");
+
+      const svg = document.getElementById("spark");
+      svg.innerHTML = `
+        <polyline fill="none" stroke="${getComputedStyle(document.documentElement).getPropertyValue('--accent')}" stroke-width="2" points="${points}" />
+      `;
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch("/api/metrics", { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to load metrics");
+        const m = await res.json();
+
+        document.getElementById("mode").textContent = m.mode || "-";
+        const modePill = document.getElementById("mode-pill");
+        modePill.textContent = m.mode || "-";
+        modePill.className = m.mode === "SNAPSHOT" ? "pill" : "pill stream";
+
+        document.getElementById("total").textContent = formatNumber(m.totalCount);
+        document.getElementById("snapshot").textContent = formatNumber(m.snapshotCount);
+        document.getElementById("stream").textContent = formatNumber(m.streamCount);
+
+        const total = m.totalCount || 0;
+        const snapshotRatio = total > 0 ? (m.snapshotCount / total) * 100 : 0;
+        const streamRatio = total > 0 ? (m.streamCount / total) * 100 : 0;
+
+        document.getElementById("snapshot-bar").style.width = `${snapshotRatio}%`;
+        document.getElementById("stream-bar").style.width = `${streamRatio}%`;
+        document.getElementById("mode-bar").style.width = m.mode === "SNAPSHOT" ? "100%" : "0%";
+
+        document.getElementById("lag").textContent = formatLag(m.lastLagMs);
+        document.getElementById("lag-status").textContent = m.lastSourceTsMs
+          ? `source.ts_ms=${m.lastSourceTsMs}`
+          : "no source.ts_ms";
+
+        document.getElementById("op-c").textContent = formatNumber(m.createCount);
+        document.getElementById("op-u").textContent = formatNumber(m.updateCount);
+        document.getElementById("op-d").textContent = formatNumber(m.deleteCount);
+        document.getElementById("op-r").textContent = formatNumber(m.readCount);
+        document.getElementById("op-x").textContent = formatNumber(m.unknownCount);
+        document.getElementById("op-e").textContent = formatNumber(m.errorCount);
+
+        const last = [];
+        if (m.lastEventAt) last.push(`at=${m.lastEventAt}`);
+        if (m.lastOp) last.push(`op=${m.lastOp}`);
+        if (m.lastDb) last.push(`db=${m.lastDb}`);
+        if (m.lastTable) last.push(`table=${m.lastTable}`);
+        if (m.lastSnapshotState) last.push(`snapshot=${m.lastSnapshotState}`);
+        document.getElementById("last-event").textContent = last.join(" | ") || "-";
+
+        updateSpark(m.totalCount || 0);
+      } catch (err) {
+        document.getElementById("last-event").textContent = `error: ${err.message}`;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, 2000);
+  </script>
+</body>
+</html>
