@@ -16,7 +16,7 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
     listener:
-      ack-mode: manual # ?? ack ?? ??
+      ack-mode: record
     properties:
       spring.json.trusted.packages: '*'
 
