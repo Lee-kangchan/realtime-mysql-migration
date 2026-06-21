@@ -5,15 +5,15 @@ import org.jooq.impl.DSL
 import org.springframework.stereotype.Service
 
 @Service
-class MigrationService(private val dsl: DSLContext) {
+class MigrationService(private val dsl: DSLContext) : CustomerMigrationPort {
     private val customers = DSL.table(DSL.name("customers"))
     private val idField = DSL.field(DSL.name("id"), Int::class.java)
     private val firstNameField = DSL.field(DSL.name("first_name"), String::class.java)
     private val lastNameField = DSL.field(DSL.name("last_name"), String::class.java)
     private val emailField = DSL.field(DSL.name("email"), String::class.java)
 
-    fun upsertCustomer(data: JsonNode) {
-        if (data == null || data.isNull) return
+    override fun upsertCustomer(data: JsonNode) {
+        if (data.isNull) return
         val id = data.get("id").asInt()
         val firstName = data.get("first_name").asText()
         val lastName = data.get("last_name").asText()
@@ -29,7 +29,7 @@ class MigrationService(private val dsl: DSLContext) {
             .execute()
     }
 
-    fun deleteCustomer(id: Int) {
+    override fun deleteCustomer(id: Int) {
         dsl.deleteFrom(customers)
             .where(idField.eq(id))
             .execute()
