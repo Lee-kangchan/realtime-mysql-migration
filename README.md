@@ -123,6 +123,7 @@ MySQL 변경 사항을 Debezium CDC로 Kafka에 발행하고, Spring Boot 앱이
    ```bash
    curl http://localhost:8080/snapshot/status
    curl http://localhost:8080/api/metrics
+   curl http://localhost:8080/api/recovery/status
    ```
    - 브라우저에서 `http://localhost:8080/dashboard`를 열면 CDC 대시보드를 볼 수 있습니다.
 
@@ -141,6 +142,7 @@ MySQL 변경 사항을 Debezium CDC로 Kafka에 발행하고, Spring Boot 앱이
 - `curl http://localhost:8083/connectors/mysql-source-connector/status`에서 connector/task 상태가 `RUNNING`인지 확인
 - Spring Boot 로그에서 `Received message:`가 출력되는지 확인
 - `GET /api/metrics`의 `totalCount`가 증가하는지 확인
+- `GET /api/recovery/status`의 `pendingFailures`가 0인지 확인
 
 ## 수동 테이블 생성 SQL
 ```sql
@@ -177,9 +179,44 @@ CREATE TABLE customers (
 - 대시보드: `GET /dashboard`
 - 지표 API: `GET /api/metrics`
 
+## 실패 복구 절차
+- Kafka 메시지 처리 중 JSON 파싱, 필수 필드 누락, DB 반영 오류가 발생하면 원본 CDC 메시지를 `cdc_failed_events` 테이블에 저장합니다.
+- 실패 건은 애플리케이션이 처음 실패를 기록하거나 조회할 때 자동으로 생성되는 `cdc_failed_events` 테이블에 보관됩니다.
+- Kafka offset은 record 단위로 처리되며, 실패 payload 저장까지 성공한 뒤 다음 메시지로 진행합니다.
+- 실패 현황 확인:
+  ```bash
+  curl http://localhost:8080/api/recovery/status
+  ```
+- `storageAvailable=false`이면 MySQL 연결 또는 실패 저장소 접근이 불가능한 상태입니다.
+- 최근 실패 목록 확인:
+  ```bash
+  curl "http://localhost:8080/api/recovery/failures?limit=20"
+  ```
+- 실패 원인을 수정한 뒤 단건 재처리:
+  ```bash
+  curl -X POST http://localhost:8080/api/recovery/failures/1/retry
+  ```
+- 재처리에 성공하면 해당 실패 건의 `resolved_at`이 기록되고 `pendingFailures`에서 제외됩니다.
+- 재처리에 다시 실패하면 `retry_count`, `last_retry_at`, 마지막 에러 정보가 갱신됩니다.
+
+## 대용량 처리 체크
+- 대량 스냅샷 중에는 Kafka consumer lag를 함께 확인해야 합니다.
+  ```bash
+  docker exec -it kafka kafka-consumer-groups \
+    --bootstrap-server kafka:9092 \
+    --describe \
+    --group migration-consumer-group
+  ```
+- `CURRENT-OFFSET`과 `LOG-END-OFFSET` 차이가 계속 증가하면 Spring Boot 소비 속도가 Kafka 적재 속도를 따라가지 못하는 상태입니다.
+- `GET /api/metrics`의 `lastLagMs`, `totalCount`, `errorCount`를 같이 확인합니다.
+- `GET /api/recovery/status`의 `pendingFailures`가 증가하면 실패 원인 확인 후 `/api/recovery/failures/{id}/retry`로 재처리합니다.
+- 대량 입력 중에는 전체 CDC payload 로그를 남기지 않고 실패 payload만 DB에 저장합니다.
+
 ## 주요 코드 위치
 - Kafka 소비자: `/Users/kchan/IdeaProjects/realtime-mysql-migration/src/main/kotlin/com/example/realtimemysqlmigration/customer/DebeziumKafkaConsumer.kt`
 - DB 반영 로직: `/Users/kchan/IdeaProjects/realtime-mysql-migration/src/main/kotlin/com/example/realtimemysqlmigration/service/MigrationService.kt`
+- 실패 복구 API: `/Users/kchan/IdeaProjects/realtime-mysql-migration/src/main/kotlin/com/example/realtimemysqlmigration/controller/FailureRecoveryController.kt`
+- 실패 이벤트 저장: `/Users/kchan/IdeaProjects/realtime-mysql-migration/src/main/kotlin/com/example/realtimemysqlmigration/service/FailedCdcEventService.kt`
 - 설정: `/Users/kchan/IdeaProjects/realtime-mysql-migration/src/main/resources/application.yml`
 - Docker: `/Users/kchan/IdeaProjects/realtime-mysql-migration/docker-compose.yml`
 
